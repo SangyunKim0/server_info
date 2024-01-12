@@ -1,8 +1,9 @@
 import paramiko
 import re
 import os
+from tabulate import tabulate
 
-def get_device_capacity(hostname, username, private_key_path):
+def get_device_info(hostname, username, private_key_path):
     try:
         # Establish SSH connection with private key
         private_key = paramiko.RSAKey(filename=private_key_path)
@@ -10,22 +11,17 @@ def get_device_capacity(hostname, username, private_key_path):
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         ssh.connect(hostname, username=username, pkey=private_key)
 
-        # Execute df command to get disk space information
+        # Execute commands to get device information
         stdin, stdout, stderr = ssh.exec_command('df -h /')
+        df_output = stdout.read().decode('utf-8')
 
-        # Parse the output to get relevant information
-        output = stdout.read().decode('utf-8')
-        lines = output.split('\n')
+        stdin, stdout, stderr = ssh.exec_command('top -bn1 | grep "Cpu(s)"')
+        cpu_output = stdout.read().decode('utf-8')
 
-        # Extracting total, used, and percentage information
-        for line in lines:
-            if '/' in line:
-                columns = re.split('\s+', line)
-                if len(columns) >= 5:
-                    total_capacity = columns[1]
-                    current_capacity = columns[2]
-                    percentage = columns[4]
-                    return total_capacity, current_capacity, percentage
+        stdin, stdout, stderr = ssh.exec_command('free -h')
+        memory_output = stdout.read().decode('utf-8')
+
+        return df_output, cpu_output, memory_output
 
     except Exception as e:
         return f"Error: {str(e)}"
@@ -56,15 +52,42 @@ def parse_ssh_config():
 
 def main():
     server_configs = parse_ssh_config()
+    sorted_configs = sorted(server_configs, key=lambda x: x["servername"])
+    table_data = []
 
-    for config in server_configs:
+    for config in sorted_configs:
         servername = config["servername"]
         hostname = config["hostname"]
         username = config["username"]
-        private_key_path = config["private_key_path"]        
-        total, current, percentage = get_device_capacity(hostname, username, private_key_path)
-        print(f"{servername}({hostname}) : \t\t |\t{total}\t|\t{current}\t|\t{percentage}\t|")
-        #print("=" * 40)
+        private_key_path = config["private_key_path"]
+
+        df_output, cpu_output, memory_output = get_device_info(hostname, username, private_key_path)
+
+        # Extracting disk information
+        df_lines = df_output.split('\n')
+        for line in df_lines:
+            if '/' in line:
+                df_columns = re.split('\s+', line)
+                if len(df_columns) >= 5:
+                    total_capacity = df_columns[1]
+                    current_capacity = df_columns[2]
+                    percentage = df_columns[4]
+
+        # Extracting CPU information
+        cpu_columns = re.split('\s+', cpu_output)
+        cpu_usage = cpu_columns[1]
+
+        # Extracting memory information
+        memory_lines = memory_output.split('\n')
+        memory_columns = re.split('\s+', memory_lines[1])
+        total_memory = memory_columns[1]
+        used_memory = memory_columns[2]
+        free_memory = memory_columns[3]
+
+        table_data.append([servername, hostname, total_capacity, current_capacity, percentage, cpu_usage, total_memory, used_memory, free_memory])
+
+    headers = ["Server Name", "Host Name", "Total Capacity", "Current Capacity", "Percentage Used", "CPU Usage", "Total Memory", "Used Memory", "Free Memory"]
+    print(tabulate(table_data, headers=headers, tablefmt="pretty"))
 
 if __name__ == "__main__":
     main()
