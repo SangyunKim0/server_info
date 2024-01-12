@@ -1,5 +1,5 @@
 # SERVER_INFO from SSH
-Print info of all server from ssh/config
+*Prints information on all servers registered in SSH/config.*
 
 # Reququired Package Information
 python versions = 3.11.*
