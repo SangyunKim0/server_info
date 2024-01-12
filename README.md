@@ -1,11 +1,9 @@
 # SERVER_INFO from SSH
-print info of all server
+Print info of all server from ssh/config
 
 # Reququired Package Information
-tabulate, 
-paramiko
+python versions = 3.11.*
 
 ``````
-python versions = 3.11.*
 pip install tabulate
 pip install paramiko
